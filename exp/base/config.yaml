@@ -1,0 +1,14 @@
+data:
+  root: /irip/zhengyaoyan_2021/data/cityscapes_video
+  bs: 4
+  num_workers: 4
+  n_pos: 10
+  n_neg: 10
+
+train:
+  total_iters: 160000
+  lr: 0.000001
+  power: 1.
+  show_interval: 20
+  snapshot_interval: 5000
+  valid_interval: 5000

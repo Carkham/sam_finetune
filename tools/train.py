@@ -49,6 +49,14 @@ def train(args, root):
     sam_model = sam.get_model().cuda()
     opt = optim.AdamW(
         sam_model.mask_decoder.parameters(), lr=args_train['lr'])
+    if args['adaptor'] == 'bias':
+        for k, p in sam_model.mask_decoder.named_parameters():
+            if "image_encoder" in k and "bias" not in k:
+                p.requires_grad = False
+    elif args['adaptor'] == 'adaptor':
+        for k, p in sam_model.named_parameters():
+            if "image_encoder" in k and "prompt_generator" not in k:
+                p.requires_grad = False
     sch = optim.lr_scheduler.PolynomialLR(
         opt, args_train['total_iters'], power=args_train["power"])
 
@@ -190,5 +198,6 @@ def train(args, root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=str)
+    torch.set_num_threads(3)
     args = parser.parse_args()
     train(open_config(args.root), args.root)

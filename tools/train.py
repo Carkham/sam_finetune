@@ -50,10 +50,12 @@ def train(args, root):
     opt = optim.AdamW(
         sam_model.mask_decoder.parameters(), lr=args_train['lr'])
     if args['adaptor'] == 'bias':
+        to_log("Bias tuning")
         for k, p in sam_model.mask_decoder.named_parameters():
             if "image_encoder" in k and "bias" not in k:
                 p.requires_grad = False
     elif args['adaptor'] == 'adaptor':
+        to_log("Adaptor tuning")
         for k, p in sam_model.named_parameters():
             if "image_encoder" in k and "prompt_generator" not in k:
                 p.requires_grad = False

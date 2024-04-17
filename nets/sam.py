@@ -18,7 +18,7 @@ else:
 
 def get_model(args):
     model = sam_model_registry['vit_b'](checkpoint='pretrain/sam_vit_b_01ec64.pth')
-    if args.adaptor == 'adaptor':
+    if args['adaptor'] == 'adaptor':
         adaptor_image_encoder = ImageEncoderViT(
             depth=12,
             embed_dim=768,
@@ -33,7 +33,7 @@ def get_model(args):
             window_size=14,
             out_chans=256,
         )
-        adaptor_image_encoder.load_state_dict(model.image_encoder.state_dict())
+        adaptor_image_encoder.load_state_dict(model.image_encoder.state_dict(), strict=False)
         model.image_encoder = adaptor_image_encoder
     return model
 

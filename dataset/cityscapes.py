@@ -10,6 +10,7 @@ import matplotlib as plt
 from tqdm import tqdm
 from cityscapesscripts.helpers import labels
 from torchvision.transforms.functional import InterpolationMode
+from cityscapesscripts.preparation.createTrainIdLabelImgs import main
 
 # seed = 2106346
 # torch.manual_seed(seed)
@@ -129,7 +130,9 @@ class csdata(Dataset):
 
 
 if __name__ == "__main__":
-    d = CSReconstruct(split="test", use_grad=False)
+    # d = CSReconstruct(split="test", use_grad=False)
+    d = csdata(root="./", split="train")
     # print(len(stat.folder), label_pool.count)
+    # main()
     print(len(d))
     print(d[0][0][0].shape)

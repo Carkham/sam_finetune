@@ -26,7 +26,7 @@ device = None
 log_file = None
 
 
-def train(args, root):
+def eval(args, root):
     args_train = args['train']
     seed = args_train.get('seed', 2106346)
     # init_seeds(seed + local_rank)
@@ -37,7 +37,9 @@ def train(args, root):
     log_file = open(os.path.join(root, "logs/log.txt"), "w")
     set_file(log_file, rank=local_rank)
     to_log(args)
-    args_data = args["data"]
+    dataset = args["eval"]["dataset"]
+    if dataset == "bdd100k":
+        
     args_train = args["train"]
 
     train_loader = DataLoader(cityscapes.csdata(

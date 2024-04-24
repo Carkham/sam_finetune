@@ -1,0 +1,6 @@
+dataset/bdd100k/
+dataset/cityscapes/
+*.pyc
+logs
+*.pth
+*.zip

@@ -12,7 +12,7 @@ train:
   show_interval: 20
   snapshot_interval: 5000
   valid_interval: 5000
-  adaptor: decoder
+  adaptor: adaptor
 
 eval:
   model: /home/r22user1/fedavgmodels/sam_finetune/exp/base/logs/Adapter_tuning.pth

@@ -8,12 +8,12 @@ import random
 
 import numpy as np
 from PIL import Image
-from skimage import color
+# from skimage import color
 
 from torch.utils import data
 import torch
 import torchvision.transforms as transforms
-import cityscapes_labels as cityscapes_labels
+import dataset.cityscapes_labels as cityscapes_labels
 
 trainid_to_name = cityscapes_labels.trainId2name
 id_to_trainid = cityscapes_labels.label2trainid
@@ -21,7 +21,7 @@ trainid_to_trainid = cityscapes_labels.trainId2trainId
 color_to_trainid = cityscapes_labels.color2trainId
 num_classes = 19
 ignore_label = 255
-groot = None
+groot = '/home/r22user1/fedavgmodels/sam_finetune/dataset/bdd100k'
 img_postfix = '.jpg'
 
 palette = [128, 64, 128, 244, 35, 232, 70, 70, 70, 102, 102, 156, 190, 153, 153,
@@ -139,7 +139,7 @@ def make_dataset(mode):
     assert mode in ['train', 'val', 'test', 'trainval']
     img_dir_name = 'images'
     img_path = os.path.join(groot, img_dir_name)
-    mask_path = os.path.join(groot, 'labels')
+    mask_path = os.path.join(groot, 'labels', 'masks')
     mask_postfix = '.png'
     # cv_splits = make_cv_splits(img_dir_name)
     if mode == 'trainval':
@@ -170,7 +170,7 @@ class BDD100K(data.Dataset):
 
         self.mean_std = ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         self.trans_img = transforms.Compose([
-            transforms.Pad(padding=[0, 0, 0, 1024]),
+            transforms.Pad(padding=[0, 0, 0, 560]),
             transforms.ToTensor(),
             transforms.Normalize(*self.mean_std)
         ])
@@ -180,18 +180,18 @@ class BDD100K(data.Dataset):
         labels = []
         for i in range(n_pos):
             for j in range(20):
-                xh = random.randint(0, 511)
+                xh = random.randint(0, 575)
                 yw = random.randint(0, 1023)
-                if gtf[0, xh * 2 + 1, yw * 2 + 1] == 1:
+                if gtf[0, int(xh * 1.25 + 1), int(yw * 1.25 + 1)] == 1:
                     points.append([yw, xh])
                     labels.append(1)
                     break
 
         for i in range(n_neg):
             for j in range(20):
-                xh = random.randint(0, 511)
+                xh = random.randint(0, 575)
                 yw = random.randint(0, 1023)
-                if gtf[0, xh * 2 + 1, yw * 2 + 1] == 0:
+                if gtf[0, int(xh * 1.25 + 1), int(yw * 1.25 + 1)] == 0:
                     points.append([yw, xh])
                     labels.append(-1)
                     break
@@ -204,17 +204,24 @@ class BDD100K(data.Dataset):
 
         img_path, mask_path = self.imgs[index]
 
-        img, mask = Image.open(img_path).convert('RGB'), Image.open(mask_path)
+        img, mask = self.trans_img(Image.open(img_path).convert('RGB')), Image.open(mask_path)
         img_name = os.path.splitext(os.path.basename(img_path))[0]
 
-        mask = np.array(mask)
-        mask_copy = mask.copy()
-        for k, v in trainid_to_trainid.items():
-            mask_copy[mask == k] = v
-
-        gtf = torch.zeros_like(mask_copy)
-        gtf[mask_copy == 0] = 1
+        img_gtf = transforms.ToTensor()(mask)
+        img_gtf = (img_gtf * 255).round().long()
+        gtf = torch.zeros_like(img_gtf)
+        gtf[img_gtf == 0] = 1
         img_gtf = gtf
+
+        # mask = np.array(mask, dtype=np.uint8)
+        # mask_copy = mask.copy()
+        # for k, v in trainid_to_trainid.items():
+        #     mask_copy[mask == k] = v
+
+        # mask_copy = torch.from_numpy(mask_copy).long()
+        # gtf = torch.zeros_like(mask_copy)
+        # gtf[mask_copy == 0] = 1
+        # img_gtf = gtf
 
         n_pos = random.randint(3, self.n_pos)
         n_neg = 0 if self.n_neg == 0 else self.n_neg

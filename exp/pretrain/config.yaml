@@ -12,8 +12,8 @@ train:
   show_interval: 20
   snapshot_interval: 5000
   valid_interval: 5000
-  adaptor: decoder
+  adaptor: pretrain
 
 eval:
-  model: /home/r22user1/fedavgmodels/sam_finetune/exp/base/logs/Adapter_tuning.pth
+  model: /home/r22user1/fedavgmodels/sam_finetune/pretrain/sam_vit_b_01ec64.pth
   dataset: bdd100k

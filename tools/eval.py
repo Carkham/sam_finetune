@@ -33,14 +33,18 @@ def train(args, root):
     if local_rank == 0:
         if not os.path.exists(os.path.join(root, "logs/result/event")):
             os.makedirs(os.path.join(root, "logs/result/event"))
-    log_file = open(os.path.join(root, "logs/log.txt"), "w")
+    args_eval = args["eval"]
+    log_file = open(os.path.join(root, f"logs/{os.path.splitext(os.path.basename(args_eval['model']))[0]}_log.txt"), "w")
     set_file(log_file, rank=local_rank)
     to_log(args)
     args_data = args["data"]
 
-    valid_loader = DataLoader(bdd100k.BDD100K(args_data["root"], split="valid"), batch_size=50)
+    valid_loader = DataLoader(bdd100k.BDD100K(args_data["root"], split="val"), batch_size=1)
 
-    sam_model = sam.get_model().cuda()
+    sam_model = sam.get_model(args['train']).cuda()
+    weight = torch.load(args_eval["model"], map_location="cpu")
+    sam_model.load_state_dict(weight)
+    to_log("load model from: {}".format(args_eval["model"]))
     for k, p in sam_model.named_parameters():
         p.requires_grad = False
 
@@ -49,10 +53,13 @@ def train(args, root):
         IoUs = 0.
         Rs = 0.
         losses = 0.
-        for img_org, img_gtf, points, labels, image_path in tqdm(valid_loader):
+        pbar = tqdm(valid_loader)
+        i = 0
+        for img_org, img_gtf, points, labels, image_path in pbar:
+            i += 1
             sam_model.eval()
-            img_input = nn.functional.interpolate(
-                img_org, [1024, 1024], mode="bilinear").cuda()
+            img_input = nn.functional.interpolate(img_org, [1024, 1024], mode="bilinear", align_corners=False, antialias=True).cuda()
+            img_input = img_input.cuda()
             img_gtf, points, labels = img_gtf.cuda(), points.cuda(), labels.cuda()
 
             with torch.no_grad():
@@ -70,7 +77,7 @@ def train(args, root):
                 multimask_output=False,
             )
             upscaled_masks = sam_model.postprocess_masks(
-                low_res_masks, [512, 1024], [1024, 2048]).cuda()
+                low_res_masks, [576, 1024], [720, 1280]).cuda()
 
             from torch.nn.functional import threshold, normalize
 
@@ -86,6 +93,7 @@ def train(args, root):
             R = I.sum() / ((img_gtf == 1).sum() + 1e-8)
             IoUs += IoU
             Rs += R
+            pbar.set_description("mIoU: {}, mR: {}".format(IoUs / (i), Rs / (i)))
     IoU = IoUs / len(valid_loader)
     R = Rs / len(valid_loader)
     loss = losses / len(valid_loader)

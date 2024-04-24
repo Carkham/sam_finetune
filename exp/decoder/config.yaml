@@ -15,5 +15,5 @@ train:
   adaptor: decoder
 
 eval:
-  model: /home/r22user1/fedavgmodels/sam_finetune/exp/base/logs/Adapter_tuning.pth
+  model: /home/r22user1/fedavgmodels/sam_finetune/exp/base/logs/Decoder_tuning.pth
   dataset: bdd100k

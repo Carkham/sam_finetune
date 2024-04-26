@@ -52,17 +52,22 @@ def train(args, root):
     if args['train']['adaptor'] == 'bias':
         to_log("Bias tuning")
         for k, p in sam_model.named_parameters():
-            if "image_encoder" in k and "bias" not in k:
+            if ("image_encoder" in k and "bias" not in k) or "prompt_encoder" in k:
                 p.requires_grad = False
     elif args['train']['adaptor'] == 'adaptor':
         to_log("Adaptor tuning")
         for k, p in sam_model.named_parameters():
-            if ("image_encoder" in k and "prompt_generator" not in k) or ("prompt_encoder" in k):
+            if ("image_encoder" in k and "prompt_generator" not in k) or "prompt_encoder" in k:
+                p.requires_grad = False
+    elif args['train']['adaptor'] == 'align':
+        to_log("Align decoder tuning")
+        for k, p in sam_model.named_parameters():
+            if "image_encoder" in k or "prompt_encoder" in k:
                 p.requires_grad = False
     else:
         to_log("Mask Decoder tuning")
         for k, p in sam_model.named_parameters():
-            if "image_encoder" in k:
+            if "image_encoder" in k or "prompt_encoder" in k:
                 p.requires_grad = False
     sch = optim.lr_scheduler.PolynomialLR(
         opt, args_train['total_iters'], power=args_train["power"])
@@ -70,6 +75,10 @@ def train(args, root):
     writer = SummaryWriter(os.path.join(root, "logs/result/event/"))
 
     tot_iter = 0
+    width_range = [0.25, 1.0]
+    mu = 0.45
+    lq_acc = 0
+    lk_acc = 0
     while True:
         if tot_iter == args_train["total_iters"]:
             break
@@ -82,13 +91,14 @@ def train(args, root):
                 img_org, [1024, 1024], mode="bilinear").cuda()
             img_gtf, points, labels = img_gtf.cuda(), points.cuda(), labels.cuda()
 
+            sam_model.apply(lambda m: setattr(m, 'width_mult', width_range[-1]))
             with torch.no_grad():
-                image_embedding = sam_model.image_encoder(img_input)
                 sparse_embeddings, dense_embeddings = sam_model.prompt_encoder(
                     points=(points, labels),
                     boxes=None,
                     masks=None,
                 )
+            image_embedding = sam_model.image_encoder(img_input)
             low_res_masks, iou_predictions = sam_model.mask_decoder(
                 image_embeddings=image_embedding,
                 image_pe=sam_model.prompt_encoder.get_dense_pe(),
@@ -106,6 +116,17 @@ def train(args, root):
             loss = nn.BCELoss()(upscaled_masks, img_gtf.float())
             opt.zero_grad()
             loss.backward()
+            if args['train']['adaptor'] == 'align':
+                loss_BCE = loss.item()
+                sam_model.apply(lambda m: setattr(m, 'width_mult', width_range[0]))
+                loss_lip, lq, lk = sam_model.mask_decoder.transformer.forward_lipschitz_loss()
+                loss_lip = mu * (loss_BCE / loss_lip.item()) * loss_lip
+                loss_lip.backward()
+                torch.nn.utils.clip_grad_norm_(sam_model.parameters(), 10.0)
+                
+                lq_acc += lq
+                lk_acc += lk
+
             opt.step()
             sch.step()
 
@@ -138,10 +159,10 @@ def train(args, root):
         #         sch.step()
 
             if tot_iter % args_train['show_interval'] == 0 and local_rank == 0:
-                to_log("iter: {}, epoch: {}, batch: {}/{}, loss: {}".format(
+                to_log("iter: {}, epoch: {}, batch: {}/{}, loss: {} loss_query: {} loss_key: {}".format(
                     tot_iter, tot_iter // len(
                         train_loader), tot_iter % len(train_loader),
-                    len(train_loader), loss))
+                    len(train_loader), loss, lq_acc / tot_iter, lk_acc / tot_iter))
                 writer.add_scalar("train/loss", loss, tot_iter)
 
                 writer.add_scalar("train/lr", opt.param_groups[0]['lr'], tot_iter)
@@ -156,6 +177,7 @@ def train(args, root):
                     losses = 0.
                     for img_org, img_gtf, points, labels, image_path in tqdm(valid_loader):
                         sam_model.eval()
+                        sam_model.apply(lambda m: setattr(m, 'width_mult', width_range[-1]))
                         img_input = nn.functional.interpolate(
                             img_org, [1024, 1024], mode="bilinear").cuda()
                         img_gtf, points, labels = img_gtf.cuda(), points.cuda(), labels.cuda()
